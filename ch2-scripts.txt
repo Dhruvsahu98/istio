@@ -1,0 +1,135 @@
+D:\Ayush-work\New folder\Istio\book-source-code
+
+---------------------------------------------
+cd C:\istio-1.17.1-win\istio-1.17.1\bin
+istioctl version
+istioctl x precheck
+istioctl install --set profile=demo -y
+
+
+---powershell------
+
+kubectl get pod -n istio-system
+
+https://istio.io/latest/docs/ops/common-problems/injection/
+
+
+-------------------
+.\istioctl.exe verify-install
+kubectl apply -f ..\samples\addons
+
+
+git clone https://github.com/istioinaction/book-source-code
+ kubectl get pod -n istio-system
+ 
+kubectl create namespace istioinaction
+kubectl config set-context $(kubectl config current-context) --namespace=istioinaction
+
+#View the current kubernets configuration
+kubectl config view
+ 
+ 
+#Injetct the istio service proxy such that the application can paticipate as service mesh
+istioctl kube-inject -f services\catalog\kubernetes\catalog.yaml
+
+#Enabling the autoinjection of the istio in the namespace
+kubectl label namespace istioinaction istio-injection=enabled 
+
+#Checking wheather the istio is enabled or not 
+kubectl get namespace -L istio-injection
+
+#Now let's deploy the service to the kubernets 
+kubectl apply -f services\catalog\kubernetes\catalog.yaml
+
+
+kubectl get deployments
+
+kubectl get pods
+
+#To validate the service make the below GET request in the postman to the below api
+kubectl run curl --image=curlimages/curl -n default --rm -i --restart=Never --command -- curl -s http://catalog.istioinaction/items/1
+
+#Deploying the webapp fascade service
+kubectl apply -f services\webapp\kubernetes\webapp.yaml
+
+kubectl run curl --image=curlimages/curl -n default --rm -i --restart=Never --command -- curl -s http://webapp.istioinaction/api/catalog/items/1
+
+#Visualizing the application using web dashboard , getting the traffic into the k8s cluster
+kubectl port-forward deploy/webapp 8080:8080
+
+#To get the network traffic in kubernetes cluster using istio-ingress-gateway
+kubectl apply -f ch2\ingress-gateway.yaml
+
+#When using the load balancer use the below command
+
+#Portforward if k8s cluster running in cloud
+kubectl port-forward deploy/istio-ingressgateway -n istio-system 8080:8080
+
+#Debugging the istio
+
+#Checking Whether k8s gateway has a route --- used to check istio proxy deployed with any application
+ istioctl proxy-config routes  deploy/istio-ingressgateway.istio-system -n istio-system
+ 
+#Below commands are used to check gateway and virtualservice
+kubectl get gateway
+kubectl get virtualservice
+
+ 
+#Istio Observability
+#Let's port port-forward graphana to local machine to be visible
+istioctl dashboard grafana http://localhost:3000
+
+#Sending some requests to the catalog service , open git bash and run below command
+while true;do curl http://localhost/api/catalog; sleep .5;done
+
+#Now let's see the distributed tracing for for every request hit into the server
+istioctl dashboard jaeger http://localhost:16686
+
+#Istio for Resiliency
+
+#Now let's break the application
+./bin/chaos.sh 500 100
+curl -v http://localhost/api/catalog
+
+./bin/chaos.sh 500 50
+curl -v http://localhost/api/catalog
+
+#refresh the browser page and see the changes in catalog service  <<<- every second request fails
+http://localhost:8080/
+
+#Handling the above issue using the istio virtualservice 
+kubectl apply -f ch2\catalog-virtualservice.yaml
+
+#refresh the browser page and see the changes in catalog service   <<<- fewer requests failed 
+http://localhost:8080/
+
+./bin/chaos.sh 500 delete
+
+
+#Istio for traffic routing
+#Before deploying the destination rule let's deploy v2 application
+kubectl apply -f services\catalog\kubernetes\catalog-deployment-v2.yaml
+
+kubectl get deployments
+
+#Test the deployment via postman 
+GET catalog V1 and V2
+
+#Now let's implement the destination rule to let istio identify different versions of catalog service
+kubectl apply -f ch2/catalog-destinationrule.yaml 
+
+#Now Let's update the virtual service to forward all traffic to v1
+kubectl apply -f ch2\catalog-virtualservice-all-v1.yaml
+
+#Test the deployment via postman 
+GET catalog V1 and V2
+
+#Based on specific header let's forward the traffic to v2
+kubectl apply -f ch2\catalog-virtualservice-dark-v2.yaml
+
+#Test the deployment via postman  via checking and unchecking the header
+GET catalog V1 and V2 
+
+##Ending
+#Now delete all of our deployments and clean everything
+kubectl delete deployment,svc,gateway,virtualservice,destinationrule --all -n istioinaction
